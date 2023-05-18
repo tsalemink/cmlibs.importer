@@ -11,28 +11,29 @@ from cmlibs.importer.base import valid
 from cmlibs.importer.errors import ImporterImportInvalidInputs, ImporterImportUnknownParameter, ImporterImportError
 
 
-def _load_mesh_from_json(region, contents):
+def _load_mesh_from_json(region, contents, coordinate_field_name):
     """
     Loads a Zinc mesh from dictionary of WebGL triangular mesh information.
     """
     field_module = region.getFieldmodule()
 
     # Create coordinate field.
-    coordinate_field = field_module.findFieldByName('coordinates')
+    coordinate_field = field_module.findFieldByName(coordinate_field_name)
     if not coordinate_field.isValid():
         coordinate_field = field_module.createFieldFiniteElement(3)
-        coordinate_field.setName('coordinates')
+        coordinate_field.setName(coordinate_field_name)
     coordinate_field.setManaged(True)
     coordinate_field.setTypeCoordinate(True)
 
     # Create nodes.
+    node_set_size = field_module.findNodesetByName('nodes').getSize()
     node_coordinates = _group_coordinates(contents['vertices'], 3)
     create_nodes(coordinate_field, node_coordinates)
 
     # Create elements.
     mesh = field_module.findMeshByDimension(2)
     element_node_set = _group_element_nodes(contents['faces'], 3)
-    _increment_node_identifiers(element_node_set)
+    _increment_node_identifiers(element_node_set, node_set_size + 1)
     create_triangle_elements(mesh, coordinate_field, element_node_set)
 
 
@@ -60,7 +61,7 @@ def _group_element_nodes(element_list, dimensions):
     return element_node_set
 
 
-def _increment_node_identifiers(element_node_set):
+def _increment_node_identifiers(element_node_set, increment):
     for element in element_node_set:
         if 0 in element:
             break
@@ -68,14 +69,14 @@ def _increment_node_identifiers(element_node_set):
             return
 
     for i in range(len(element_node_set)):
-        element_node_set[i] = [x+1 for x in element_node_set[i]]
+        element_node_set[i] = [x+increment for x in element_node_set[i]]
 
 
 class ShapeError(Exception):
     pass
 
 
-def import_data_into_region(region, inputs):
+def import_data_into_region(region, inputs, coordinate_field_name='mesh_coordinates'):
     """
     This method is intended as an importer for scenes exported by the cmlibs.exporter.webgl.ArgonSceneExporter class. A Zinc mesh is
     created in the supplied region using the data from the input file. Input files should be in WebGL JSON format.
@@ -88,7 +89,7 @@ def import_data_into_region(region, inputs):
 
     field_module = region.getFieldmodule()
     with ChangeManager(field_module):
-        _load_mesh_from_json(region, contents)
+        _load_mesh_from_json(region, contents, coordinate_field_name)
 
 
 def import_data(inputs, output_directory):
